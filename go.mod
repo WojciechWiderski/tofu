@@ -1,4 +1,4 @@
-module tofu
+module github.com/WojciechWiderski/tofu
 
 go 1.20
 
