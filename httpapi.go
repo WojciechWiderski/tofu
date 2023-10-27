@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -170,6 +171,8 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 func (a *HttpAPI) GetInterfaceFromURL(r *http.Request) (*Model, error) {
 	for _, model := range a.Models.All {
 		if model.Name == strings.Split(r.URL.String(), "/")[1] {
+			newIn := reflect.TypeOf(model.In)
+			model.In = newIn
 			return model, nil
 		}
 	}
