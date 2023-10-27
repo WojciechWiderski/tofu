@@ -47,7 +47,8 @@ func (m *MySqlDB) Migrate() error {
 
 func (m *MySqlDB) Add(ctx context.Context, in interface{}) error {
 	tx := m.db.Begin()
-	if result := m.db.Create(in); result.Error != nil {
+
+	if result := tx.Create(in); result.Error != nil {
 		tx.Rollback()
 		return NewInternalf("ms.Create(in)", fmt.Errorf(result.Error.Error()))
 	}
@@ -58,7 +59,7 @@ func (m *MySqlDB) Add(ctx context.Context, in interface{}) error {
 func (m *MySqlDB) Get(ctx context.Context, in interface{}, params ParamRequest) (interface{}, error) {
 	tx := m.db.Begin()
 
-	if result := m.db.First(&in, fmt.Sprintf("%s = ?", params.By), params.Value); result.Error != nil {
+	if result := tx.First(&in, fmt.Sprintf("%s = ?", params.By), params.Value); result.Error != nil {
 		tx.Rollback()
 		return nil, result.Error
 	}
@@ -76,7 +77,7 @@ func (m *MySqlDB) Update(ctx context.Context, update interface{}, in interface{}
 		tx.Rollback()
 		return err
 	}
-	if result := m.db.Model(in).Updates(update); result.Error != nil {
+	if result := tx.Model(in).Updates(update); result.Error != nil {
 		tx.Rollback()
 		return result.Error
 	}
