@@ -15,6 +15,8 @@ type Tofu struct {
 	Models     *Models
 	HTTPServer *http.Server
 	DB         DBOperations
+
+	MQTT *MQTT
 }
 
 func New(opts ...func(tofu *Tofu)) *Tofu {
@@ -45,9 +47,17 @@ func WithHTTPServer(config HTTPConfig) func(*Tofu) {
 	}
 }
 
+func WithMQTTBroker(config MQTTConfig) func(*Tofu) {
+	return func(tofu *Tofu) {
+		tofu.MQTT = NewMQTT(config)
+	}
+}
+
 func (tofu *Tofu) Run() {
-	if err := tofu.DB.Migrate(); err != nil {
-		panic(err)
+	if tofu.DB != nil {
+		if err := tofu.DB.Migrate(); err != nil {
+			panic(err)
+		}
 	}
 
 	if tofu.HTTPServer != nil {
@@ -68,5 +78,23 @@ func (tofu *Tofu) Run() {
 			fmt.Println("grace down")
 		})
 		_ = tofu.Graceful.Wait()
+	}
+
+	if tofu.MQTT != nil {
+		for _, subscriber := range tofu.MQTT.subscribers {
+			go func(s SubFn) {
+				tofu.MQTT.subscribe(s.Topic, s.fn)
+			}(subscriber)
+		}
+		for _, publisher := range tofu.MQTT.publishers {
+			go func(p PubFn) {
+				tofu.MQTT.publish(p.Topic, p.fn)
+			}(publisher)
+		}
+		tofu.Graceful.GoNoErr(func() {
+			tofu.MQTT.disconnect()
+		})
+		_ = tofu.Graceful.Wait()
+
 	}
 }

@@ -13,3 +13,11 @@ type MySqlConfig struct {
 type HTTPConfig struct {
 	Port string
 }
+
+type MQTTConfig struct {
+	Broker   string
+	Port     int
+	ClientID string
+	Username string
+	Password string
+}
