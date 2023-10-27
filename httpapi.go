@@ -86,14 +86,11 @@ func (a *HttpAPI) GetBy(w http.ResponseWriter, r *http.Request) error {
 		To:    query.Get("to"),
 	}
 
-	//
-	//if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-	//	return NewInternalf("json.NewDecoder(r.Body)", err)
-	//}
-
-	in.In, err = in.Function(ctx, in.In)
-	if err != nil {
-		return Wrap("in.Function", err)
+	if in.Function != nil {
+		in.In, err = in.Function(ctx, in.In)
+		if err != nil {
+			return Wrap("in.Function", err)
+		}
 	}
 
 	resp, err := a.Database.Get(ctx, in.In, req)
@@ -117,9 +114,11 @@ func (a *HttpAPI) Add(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
 
-	in.In, err = in.Function(ctx, in.In)
-	if err != nil {
-		return Wrap("in.Function", err)
+	if in.Function != nil {
+		in.In, err = in.Function(ctx, in.In)
+		if err != nil {
+			return Wrap("in.Function", err)
+		}
 	}
 
 	if err := a.Database.Add(ctx, in.In); err != nil {
@@ -151,9 +150,11 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
 
-	in.In, err = in.Function(ctx, in.In)
-	if err != nil {
-		return Wrap("in.Function", err)
+	if in.Function != nil {
+		in.In, err = in.Function(ctx, in.In)
+		if err != nil {
+			return Wrap("in.Function", err)
+		}
 	}
 
 	err = a.Database.Update(ctx, update, in, id)
