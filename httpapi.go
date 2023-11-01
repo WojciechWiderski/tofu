@@ -103,6 +103,7 @@ func (a *HttpAPI) GetBy(w http.ResponseWriter, r *http.Request) error {
 	HandleSuccess(w, r, http.StatusOK, resp)
 	return nil
 }
+
 func (a *HttpAPI) Add(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	in, err := a.GetInterfaceFromURL(r)
@@ -171,9 +172,17 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 func (a *HttpAPI) GetInterfaceFromURL(r *http.Request) (*Model, error) {
 	for _, model := range a.Models.All {
 		if model.Name == strings.Split(r.URL.String(), "/")[1] {
-			newIn := reflect.TypeOf(model.In)
-			model.In = newIn
-			return model, nil
+
+			var newModelIn interface{}
+
+			newModelIn = reflect.New(reflect.ValueOf(model.In).Elem().Type()).Interface()
+
+			return &Model{
+				In:       newModelIn,
+				Name:     model.Name,
+				Function: model.Function,
+			}, nil
+
 		}
 	}
 	return nil, nil
