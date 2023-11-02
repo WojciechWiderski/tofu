@@ -72,7 +72,7 @@ func (tofu *Tofu) Run() {
 
 		tofu.Graceful.GoNoErr(func() {
 			if err := tofu.HTTPServer.Shutdown(tofu.CTX); err != nil && err != http.ErrServerClosed {
-				fmt.Println("graaqaceee")
+				fmt.Println("graceful shutdown http server error:", err)
 				return
 			}
 			fmt.Println("grace down")
@@ -80,7 +80,7 @@ func (tofu *Tofu) Run() {
 		_ = tofu.Graceful.Wait()
 	}
 
-	if tofu.MQTT != nil {
+	if tofu.MQTT != nil && (len(tofu.MQTT.subscribers) > 0 || len(tofu.MQTT.publishers) > 0) {
 		for _, subscriber := range tofu.MQTT.subscribers {
 			go func(s SubFn) {
 				tofu.MQTT.subscribe(s.Topic, s.fn)
