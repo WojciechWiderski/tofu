@@ -117,7 +117,7 @@ func (a *HttpAPI) Add(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if in.Function != nil {
-		in.In, err = in.Function(ctx, in.In)
+		in.In, err = in.Function(ctx, &in.In)
 		if err != nil {
 			return Wrap("in.Function", err)
 		}
