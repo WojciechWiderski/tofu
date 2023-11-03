@@ -3,6 +3,7 @@ package tofu
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -56,7 +57,7 @@ func (m *MySqlDB) Add(ctx context.Context, in interface{}) error {
 	return nil
 }
 
-func (m *MySqlDB) Get(ctx context.Context, in interface{}, params ParamRequest) (interface{}, error) {
+func (m *MySqlDB) GetOne(ctx context.Context, in interface{}, params ParamRequest) (interface{}, error) {
 	tx := m.db.Begin()
 
 	if result := tx.First(&in, fmt.Sprintf("%s = ?", params.By), params.Value); result.Error != nil {
@@ -67,9 +68,28 @@ func (m *MySqlDB) Get(ctx context.Context, in interface{}, params ParamRequest) 
 	return in, nil
 }
 
+func (m *MySqlDB) GetMany(ctx context.Context, in interface{}, params ParamRequest) ([]interface{}, error) {
+	tx := m.db.Begin()
+	var result []any
+	rows, err := tx.Model(in).Rows()
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		newIn := reflect.New(reflect.ValueOf(in).Elem().Type()).Interface()
+		tx.ScanRows(rows, &newIn)
+		result = append(result, newIn)
+	}
+
+	tx.Commit()
+	return result, nil
+}
+
 func (m *MySqlDB) Update(ctx context.Context, update interface{}, in interface{}, id int) error {
 	tx := m.db.Begin()
-	in, err := m.Get(ctx, in, ParamRequest{
+	in, err := m.GetOne(ctx, in, ParamRequest{
 		By:    "id",
 		Value: id,
 	})

@@ -20,7 +20,8 @@ type HttpAPI struct {
 
 type DBOperations interface {
 	Add(ctx context.Context, in interface{}) error
-	Get(ctx context.Context, in interface{}, params ParamRequest) (interface{}, error)
+	GetOne(ctx context.Context, in interface{}, params ParamRequest) (interface{}, error)
+	GetMany(ctx context.Context, in interface{}, params ParamRequest) ([]interface{}, error)
 	Update(ctx context.Context, update interface{}, in interface{}, id int) error
 	Migrate() error
 }
@@ -54,9 +55,10 @@ func (a *HttpAPI) GetHandler() http.Handler {
 	r.Use(middleware.Logger)
 
 	for _, model := range a.Models.All {
-		r.With().Post(fmt.Sprintf("/{%s}/by", model.Name), ApiHandleError(a.GetBy))
+		r.With().Post(fmt.Sprintf("/{%s}/one", model.Name), ApiHandleError(a.GetOne))
+		r.With().Post(fmt.Sprintf("/{%s}/many", model.Name), ApiHandleError(a.GetMany))
 		r.With().Post(fmt.Sprintf("/{%s}/add", model.Name), ApiHandleError(a.Add))
-		r.With().Put(fmt.Sprintf("/{%s}/update/{id}", model.Name), ApiHandleError(a.Update))
+		r.With().Put(fmt.Sprintf("/{%s}/{id}/update", model.Name), ApiHandleError(a.Update))
 
 		for _, route := range r.Routes() {
 			fmt.Println(route.Pattern)
@@ -72,7 +74,7 @@ type ParamRequest struct {
 	To    any `json:"to"`
 }
 
-func (a *HttpAPI) GetBy(w http.ResponseWriter, r *http.Request) error {
+func (a *HttpAPI) GetOne(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	in, err := a.GetInterfaceFromURL(r)
 	if err != nil {
@@ -94,7 +96,39 @@ func (a *HttpAPI) GetBy(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	resp, err := a.Database.Get(ctx, in.In, req)
+	resp, err := a.Database.GetOne(ctx, in.In, req)
+
+	if err != nil {
+		return Wrap(fmt.Sprintf("a.DB.Get in - %v by - %v by value - %v.", in, by, req.By), err)
+	}
+
+	HandleSuccess(w, r, http.StatusOK, resp)
+	return nil
+}
+
+func (a *HttpAPI) GetMany(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	in, err := a.GetInterfaceFromURL(r)
+	if err != nil {
+		return Wrap("budget.GetInterfaceFromParam", err)
+	}
+
+	query := r.URL.Query()
+	req := ParamRequest{
+		By:    query.Get("by"),
+		Value: query.Get("value"),
+		From:  query.Get("from"),
+		To:    query.Get("to"),
+	}
+
+	if in.Function != nil {
+		in.In, err = in.Function(ctx, in.In)
+		if err != nil {
+			return Wrap("in.Function", err)
+		}
+	}
+
+	resp, err := a.Database.GetMany(ctx, in.In, req)
 
 	if err != nil {
 		return Wrap(fmt.Sprintf("a.DB.Get in - %v by - %v by value - %v.", in, by, req.By), err)
@@ -149,7 +183,7 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("strconv.Atoi()", err)
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(update); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&update.In); err != nil {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
 
@@ -160,7 +194,7 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	err = a.Database.Update(ctx, update, in, id)
+	err = a.Database.Update(ctx, update.In, in.In, id)
 
 	if err != nil {
 		return Wrap(fmt.Sprintf("a.DB.Update update - %v in - %v id - %v.", update, in, id), err)
@@ -173,14 +207,13 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 func (a *HttpAPI) GetInterfaceFromURL(r *http.Request) (*Model, error) {
 	for _, model := range a.Models.All {
 		if model.Name == strings.Split(r.URL.String(), "/")[1] {
-
 			newModelIn := reflect.New(reflect.ValueOf(model.In).Elem().Type()).Interface()
+
 			return &Model{
 				In:       newModelIn,
 				Name:     model.Name,
 				Function: model.Function,
 			}, nil
-
 		}
 	}
 	return nil, nil
