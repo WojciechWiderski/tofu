@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 )
 
 type HttpAPI struct {
@@ -50,9 +51,18 @@ func WithDatabase(db DBOperations) func(*HttpAPI) {
 	}
 }
 
-func (a *HttpAPI) GetHandler() http.Handler {
+func (a *HttpAPI) GetHandler(corsConfig CorsConfig) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
+
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   corsConfig.AllowedOrigins,
+		AllowedMethods:   []string{"GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: corsConfig.AllowCredentials,
+		MaxAge:           300, // Maximum value not ignored by any of major browsers
+	}))
 
 	for _, model := range a.Models.All {
 		r.With().Post(fmt.Sprintf("/{%s}/one", model.Name), ApiHandleError(a.GetOne))

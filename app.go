@@ -11,6 +11,7 @@ type Tofu struct {
 
 	*Graceful
 	Config
+	CorsConfig
 
 	Models     *Models
 	HTTPServer *http.Server
@@ -40,10 +41,11 @@ func WithMySQLDB(config MySqlConfig) func(*Tofu) {
 	}
 }
 
-func WithHTTPServer(config HTTPConfig) func(*Tofu) {
+func WithHTTPServer(httpConfig HTTPConfig, corsConfig CorsConfig) func(*Tofu) {
 	return func(tofu *Tofu) {
 		tofu.HTTPServer = &http.Server{}
-		tofu.HTTPServer.Addr = fmt.Sprintf(config.Port)
+		tofu.HTTPServer.Addr = fmt.Sprintf(httpConfig.Port)
+		tofu.CorsConfig = corsConfig
 	}
 }
 
@@ -62,7 +64,7 @@ func (tofu *Tofu) Run() {
 
 	if tofu.HTTPServer != nil {
 		api := NewHttpApi(tofu.Models, WithDatabase(tofu.DB))
-		tofu.HTTPServer.Handler = api.GetHandler()
+		tofu.HTTPServer.Handler = api.GetHandler(tofu.CorsConfig)
 
 		go func() {
 			if err := tofu.HTTPServer.ListenAndServe(); err != nil {
