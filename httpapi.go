@@ -101,7 +101,7 @@ func (a *HttpAPI) GetOne(w http.ResponseWriter, r *http.Request) error {
 		To:    query.Get("to"),
 	}
 
-	in.In, err = RunFn(ctx, in.Functions, in.In)
+	in.In, err = a.runFn(ctx, in.Functions, in.In)
 	if err != nil {
 		return Wrap("in.Function", err)
 	}
@@ -131,7 +131,7 @@ func (a *HttpAPI) GetMany(w http.ResponseWriter, r *http.Request) error {
 		To:    query.Get("to"),
 	}
 
-	in.In, err = RunFn(ctx, in.Functions, in.In)
+	in.In, err = a.runFn(ctx, in.Functions, in.In)
 	if err != nil {
 		return Wrap("in.Function", err)
 	}
@@ -158,7 +158,7 @@ func (a *HttpAPI) Add(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
 
-	in.In, err = RunFn(ctx, in.Functions, in.In)
+	in.In, err = a.runFn(ctx, in.Functions, in.In)
 	if err != nil {
 		return Wrap("in.Function", err)
 	}
@@ -193,7 +193,7 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
 
-	in.In, err = RunFn(ctx, in.Functions, in.In)
+	in.In, err = a.runFn(ctx, in.Functions, in.In)
 	if err != nil {
 		return Wrap("in.Function", err)
 	}
@@ -220,7 +220,7 @@ func (a *HttpAPI) Delete(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("strconv.Atoi()", err)
 	}
 
-	in.In, err = RunFn(ctx, in.Functions, in.In)
+	in.In, err = a.runFn(ctx, in.Functions, in.In)
 	if err != nil {
 		return Wrap("in.Function", err)
 	}
@@ -249,11 +249,11 @@ func (a *HttpAPI) GetInterfaceFromURL(r *http.Request) (*Model, error) {
 	return nil, nil
 }
 
-func RunFn(ctx context.Context, fns map[RouteType]Fn, in interface{}) (interface{}, error) {
+func (a *HttpAPI) runFn(ctx context.Context, fns map[RouteType]Fn, in interface{}) (interface{}, error) {
 	routeType := RouteTypeFromCtx(ctx)
 	fn, ok := fns[routeType]
 	if !ok {
 		return in, nil
 	}
-	return fn.f(ctx, in)
+	return fn.f(ctx, in, a.Database)
 }

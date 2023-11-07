@@ -29,7 +29,7 @@ const (
 
 type Fn struct {
 	routeType RouteType
-	f         func(ctx context.Context, in interface{}) (interface{}, error)
+	f         func(ctx context.Context, in interface{}, operations DBOperations) (interface{}, error)
 }
 
 func RouteTypeFromCtx(ctx context.Context) RouteType {
@@ -67,7 +67,7 @@ func NewModel(in interface{}, name string) *Model {
 	}
 }
 
-func (m *Model) SetFunc(routeType RouteType, f func(ctx context.Context, in interface{}) (interface{}, error)) *Model {
+func (m *Model) AddFunc(routeType RouteType, f func(ctx context.Context, in interface{}, operations DBOperations) (interface{}, error)) *Model {
 	m.Functions[routeType] = Fn{
 		routeType: routeType,
 		f:         f,
