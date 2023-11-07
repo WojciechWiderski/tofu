@@ -104,3 +104,13 @@ func (m *MySqlDB) Update(ctx context.Context, update interface{}, in interface{}
 	tx.Commit()
 	return nil
 }
+
+func (m *MySqlDB) Delete(ctx context.Context, in interface{}, id int) error {
+	tx := m.db.Begin()
+	if result := tx.Delete(in, id); result.Error != nil {
+		tx.Rollback()
+		return result.Error
+	}
+	tx.Commit()
+	return nil
+}

@@ -5,28 +5,73 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
 
-type Fn func(ctx context.Context, in interface{}) (interface{}, error)
+type RouteType uint8
+
+const (
+	RouteTypeCtxKey = "route-type-ctx-key"
+)
+
+const (
+	WrongType RouteType = iota
+	GetOne
+	GetMany
+	AddOne
+	AddMany
+	Update
+	DeleteOne
+	DeleteMany
+)
+
+type Fn struct {
+	routeType RouteType
+	f         func(ctx context.Context, in interface{}) (interface{}, error)
+}
+
+func RouteTypeFromCtx(ctx context.Context) RouteType {
+	if value, ok := ctx.Value(RouteTypeCtxKey).(RouteType); ok {
+		return value
+	}
+	return WrongType
+}
+func ContextWithRouteType(ctx context.Context, routeType RouteType) context.Context {
+	return context.WithValue(ctx, RouteTypeCtxKey, routeType)
+}
+
+func RouteTypeMiddleware(routeType RouteType) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			r = r.WithContext(context.WithValue(ctx, RouteTypeCtxKey, routeType))
+			next.ServeHTTP(w, r)
+		})
+	}
+}
 
 type Model struct {
-	Name     string
-	In       interface{}
-	Function Fn
-	Routes   []chi.Route
+	Name      string
+	In        interface{}
+	Functions map[RouteType]Fn
+	Routes    []chi.Route
 }
 
 func NewModel(in interface{}, name string) *Model {
 	return &Model{
-		Name: name,
-		In:   in,
+		Name:      name,
+		In:        in,
+		Functions: make(map[RouteType]Fn),
 	}
 }
 
-func (m *Model) SetFunc(f func(ctx context.Context, in interface{}) (interface{}, error)) *Model {
-	m.Function = f
+func (m *Model) SetFunc(routeType RouteType, f func(ctx context.Context, in interface{}) (interface{}, error)) *Model {
+	m.Functions[routeType] = Fn{
+		routeType: routeType,
+		f:         f,
+	}
 	return m
 }
 func (m *Model) SetRoute(pattern string) *Model {

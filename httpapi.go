@@ -24,6 +24,7 @@ type DBOperations interface {
 	GetOne(ctx context.Context, in interface{}, params ParamRequest) (interface{}, error)
 	GetMany(ctx context.Context, in interface{}, params ParamRequest) ([]interface{}, error)
 	Update(ctx context.Context, update interface{}, in interface{}, id int) error
+	Delete(ctx context.Context, in interface{}, id int) error
 	Migrate() error
 }
 
@@ -65,10 +66,11 @@ func (a *HttpAPI) GetHandler(corsConfig CorsConfig) http.Handler {
 	}))
 
 	for _, model := range a.Models.All {
-		r.With().Post(fmt.Sprintf("/{%s}/one", model.Name), ApiHandleError(a.GetOne))
-		r.With().Post(fmt.Sprintf("/{%s}/many", model.Name), ApiHandleError(a.GetMany))
-		r.With().Post(fmt.Sprintf("/{%s}/add", model.Name), ApiHandleError(a.Add))
-		r.With().Put(fmt.Sprintf("/{%s}/{id}/update", model.Name), ApiHandleError(a.Update))
+		r.With(RouteTypeMiddleware(GetOne)).Get(fmt.Sprintf("/{%s}/one", model.Name), ApiHandleError(a.GetOne))
+		r.With(RouteTypeMiddleware(GetMany)).Get(fmt.Sprintf("/{%s}/many", model.Name), ApiHandleError(a.GetMany))
+		r.With(RouteTypeMiddleware(AddOne)).Post(fmt.Sprintf("/{%s}/add", model.Name), ApiHandleError(a.Add))
+		r.With(RouteTypeMiddleware(Update)).Put(fmt.Sprintf("/{%s}/{id}/update", model.Name), ApiHandleError(a.Update))
+		r.With(RouteTypeMiddleware(DeleteOne)).Delete(fmt.Sprintf("/{%s}/{id}/delete", model.Name), ApiHandleError(a.Delete))
 
 		for _, route := range r.Routes() {
 			fmt.Println(route.Pattern)
@@ -99,11 +101,9 @@ func (a *HttpAPI) GetOne(w http.ResponseWriter, r *http.Request) error {
 		To:    query.Get("to"),
 	}
 
-	if in.Function != nil {
-		in.In, err = in.Function(ctx, in.In)
-		if err != nil {
-			return Wrap("in.Function", err)
-		}
+	in.In, err = RunFn(ctx, in.Functions, in.In)
+	if err != nil {
+		return Wrap("in.Function", err)
 	}
 
 	resp, err := a.Database.GetOne(ctx, in.In, req)
@@ -131,11 +131,9 @@ func (a *HttpAPI) GetMany(w http.ResponseWriter, r *http.Request) error {
 		To:    query.Get("to"),
 	}
 
-	if in.Function != nil {
-		in.In, err = in.Function(ctx, in.In)
-		if err != nil {
-			return Wrap("in.Function", err)
-		}
+	in.In, err = RunFn(ctx, in.Functions, in.In)
+	if err != nil {
+		return Wrap("in.Function", err)
 	}
 
 	resp, err := a.Database.GetMany(ctx, in.In, req)
@@ -160,11 +158,9 @@ func (a *HttpAPI) Add(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
 
-	if in.Function != nil {
-		in.In, err = in.Function(ctx, in.In)
-		if err != nil {
-			return Wrap("in.Function", err)
-		}
+	in.In, err = RunFn(ctx, in.Functions, in.In)
+	if err != nil {
+		return Wrap("in.Function", err)
 	}
 
 	if err := a.Database.Add(ctx, in.In); err != nil {
@@ -197,11 +193,9 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
 
-	if in.Function != nil {
-		in.In, err = in.Function(ctx, in.In)
-		if err != nil {
-			return Wrap("in.Function", err)
-		}
+	in.In, err = RunFn(ctx, in.Functions, in.In)
+	if err != nil {
+		return Wrap("in.Function", err)
 	}
 
 	err = a.Database.Update(ctx, update.In, in.In, id)
@@ -214,17 +208,52 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+func (a *HttpAPI) Delete(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	in, err := a.GetInterfaceFromURL(r)
+	if err != nil {
+		return Wrap("budget.GetInterfaceFromParam", err)
+	}
+
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		return NewInternalf("strconv.Atoi()", err)
+	}
+
+	in.In, err = RunFn(ctx, in.Functions, in.In)
+	if err != nil {
+		return Wrap("in.Function", err)
+	}
+
+	err = a.Database.Delete(ctx, in.In, id)
+	if err != nil {
+		return Wrap(fmt.Sprintf("a.DB.Delete in - %v id - %v.", in, id), err)
+	}
+
+	HandleSuccess(w, r, http.StatusNoContent, nil)
+	return nil
+}
+
 func (a *HttpAPI) GetInterfaceFromURL(r *http.Request) (*Model, error) {
 	for _, model := range a.Models.All {
 		if model.Name == strings.Split(r.URL.String(), "/")[1] {
 			newModelIn := reflect.New(reflect.ValueOf(model.In).Elem().Type()).Interface()
 
 			return &Model{
-				In:       newModelIn,
-				Name:     model.Name,
-				Function: model.Function,
+				In:        newModelIn,
+				Name:      model.Name,
+				Functions: model.Functions,
 			}, nil
 		}
 	}
 	return nil, nil
+}
+
+func RunFn(ctx context.Context, fns map[RouteType]Fn, in interface{}) (interface{}, error) {
+	routeType := RouteTypeFromCtx(ctx)
+	fn, ok := fns[routeType]
+	if !ok {
+		return in, nil
+	}
+	return fn.f(ctx, in)
 }
