@@ -2,10 +2,6 @@ package tofu
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -13,43 +9,29 @@ import (
 type RouteType uint8
 
 const (
-	RouteTypeCtxKey = "route-type-ctx-key"
+	WrongRtType RouteType = iota
+	RouteAll
+	RouteGetOne
+	RouteGetMany
+	RouteAddOne
+	RouteAddMany
+	RouteUpdate
+	RouteDeleteOne
+	RouteDeleteMany
 )
 
+type FunctionType uint8
+
 const (
-	WrongType RouteType = iota
-	GetOne
-	GetMany
-	AddOne
-	AddMany
-	Update
-	DeleteOne
-	DeleteMany
+	WrongFnType FunctionType = iota
+	FnBeforeDBO
+	FnAfterDBO
 )
 
 type Fn struct {
-	routeType RouteType
-	f         func(ctx context.Context, in interface{}, operations DBOperations) (interface{}, error)
-}
-
-func RouteTypeFromCtx(ctx context.Context) RouteType {
-	if value, ok := ctx.Value(RouteTypeCtxKey).(RouteType); ok {
-		return value
-	}
-	return WrongType
-}
-func ContextWithRouteType(ctx context.Context, routeType RouteType) context.Context {
-	return context.WithValue(ctx, RouteTypeCtxKey, routeType)
-}
-
-func RouteTypeMiddleware(routeType RouteType) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			r = r.WithContext(context.WithValue(ctx, RouteTypeCtxKey, routeType))
-			next.ServeHTTP(w, r)
-		})
-	}
+	functionType FunctionType
+	routeType    RouteType
+	f            func(ctx context.Context, in interface{}, operations DBOperations) (interface{}, error)
 }
 
 type Model struct {
@@ -67,10 +49,11 @@ func NewModel(in interface{}, name string) *Model {
 	}
 }
 
-func (m *Model) AddFunc(routeType RouteType, f func(ctx context.Context, in interface{}, operations DBOperations) (interface{}, error)) *Model {
+func (m *Model) AddFunc(routeType RouteType, functionType FunctionType, f func(ctx context.Context, in interface{}, operations DBOperations) (interface{}, error)) *Model {
 	m.Functions[routeType] = Fn{
-		routeType: routeType,
-		f:         f,
+		functionType: functionType,
+		routeType:    routeType,
+		f:            f,
 	}
 	return m
 }
@@ -86,24 +69,6 @@ func NewModels(models ...*Model) *Models {
 	return &Models{All: models}
 }
 
-func (m *Models) GetInterfaces() []interface{} {
-	var ins []interface{}
-	for _, model := range m.All {
-		ins = append(ins, model.In)
-	}
-	return ins
-}
-
 func (m *Models) Set(model *Model) {
 	m.All = append(m.All, model)
-}
-
-func (m *Models) GetModels() *Models {
-	return m
-}
-
-func (m *Model) Decode(body io.Reader) {
-	if err := json.NewDecoder(body).Decode(&m.In); err != nil {
-		fmt.Println(err)
-	}
 }

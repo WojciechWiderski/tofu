@@ -25,7 +25,7 @@ type DBOperations interface {
 	GetMany(ctx context.Context, in interface{}, params ParamRequest) ([]interface{}, error)
 	Update(ctx context.Context, update interface{}, in interface{}, id int) error
 	Delete(ctx context.Context, in interface{}, id int) error
-	Migrate() error
+	migrate() error
 }
 
 const (
@@ -66,11 +66,11 @@ func (a *HttpAPI) GetHandler(corsConfig CorsConfig) http.Handler {
 	}))
 
 	for _, model := range a.Models.All {
-		r.With(RouteTypeMiddleware(GetOne)).Get(fmt.Sprintf("/{%s}/one", model.Name), ApiHandleError(a.GetOne))
-		r.With(RouteTypeMiddleware(GetMany)).Get(fmt.Sprintf("/{%s}/many", model.Name), ApiHandleError(a.GetMany))
-		r.With(RouteTypeMiddleware(AddOne)).Post(fmt.Sprintf("/{%s}/add", model.Name), ApiHandleError(a.Add))
-		r.With(RouteTypeMiddleware(Update)).Put(fmt.Sprintf("/{%s}/{id}/update", model.Name), ApiHandleError(a.Update))
-		r.With(RouteTypeMiddleware(DeleteOne)).Delete(fmt.Sprintf("/{%s}/{id}/delete", model.Name), ApiHandleError(a.Delete))
+		r.With(RouteTypeMiddleware(RouteGetOne)).Get(fmt.Sprintf("/{%s}/one", model.Name), ApiHandleError(a.GetOne))
+		r.With(RouteTypeMiddleware(RouteGetMany)).Get(fmt.Sprintf("/{%s}/many", model.Name), ApiHandleError(a.GetMany))
+		r.With(RouteTypeMiddleware(RouteAddOne)).Post(fmt.Sprintf("/{%s}/add", model.Name), ApiHandleError(a.Add))
+		r.With(RouteTypeMiddleware(RouteUpdate)).Put(fmt.Sprintf("/{%s}/{id}/update", model.Name), ApiHandleError(a.Update))
+		r.With(RouteTypeMiddleware(RouteDeleteOne)).Delete(fmt.Sprintf("/{%s}/{id}/delete", model.Name), ApiHandleError(a.Delete))
 
 		for _, route := range r.Routes() {
 			fmt.Println(route.Pattern)
@@ -88,9 +88,9 @@ type ParamRequest struct {
 
 func (a *HttpAPI) GetOne(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	in, err := a.GetInterfaceFromURL(r)
+	model, err := a.getModelFromURL(r)
 	if err != nil {
-		return Wrap("budget.GetInterfaceFromParam", err)
+		return Wrap("a.getModelFromURL", err)
 	}
 
 	query := r.URL.Query()
@@ -101,15 +101,19 @@ func (a *HttpAPI) GetOne(w http.ResponseWriter, r *http.Request) error {
 		To:    query.Get("to"),
 	}
 
-	in.In, err = a.runFn(ctx, in.Functions, in.In)
+	model.In, err = a.runFn(ctx, FnBeforeDBO, model)
 	if err != nil {
-		return Wrap("in.Function", err)
+		return Wrap("a.runFn - FnBeforeDBO", err)
 	}
 
-	resp, err := a.Database.GetOne(ctx, in.In, req)
-
+	resp, err := a.Database.GetOne(ctx, model.In, req)
 	if err != nil {
-		return Wrap(fmt.Sprintf("a.DB.Get in - %v by - %v by value - %v.", in, by, req.By), err)
+		return Wrap(fmt.Sprintf("a.Database.GetOne model - %v by - %v by value - %v.", model, by, req.By), err)
+	}
+
+	model.In, err = a.runFn(ctx, FnAfterDBO, model)
+	if err != nil {
+		return Wrap("a.runFn - FnAfterDBO", err)
 	}
 
 	HandleSuccess(w, r, http.StatusOK, resp)
@@ -118,9 +122,9 @@ func (a *HttpAPI) GetOne(w http.ResponseWriter, r *http.Request) error {
 
 func (a *HttpAPI) GetMany(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	in, err := a.GetInterfaceFromURL(r)
+	model, err := a.getModelFromURL(r)
 	if err != nil {
-		return Wrap("budget.GetInterfaceFromParam", err)
+		return Wrap("a.getModelFromURL", err)
 	}
 
 	query := r.URL.Query()
@@ -131,15 +135,20 @@ func (a *HttpAPI) GetMany(w http.ResponseWriter, r *http.Request) error {
 		To:    query.Get("to"),
 	}
 
-	in.In, err = a.runFn(ctx, in.Functions, in.In)
+	model.In, err = a.runFn(ctx, FnBeforeDBO, model)
 	if err != nil {
-		return Wrap("in.Function", err)
+		return Wrap("a.runFn - FnBeforeDBO", err)
 	}
 
-	resp, err := a.Database.GetMany(ctx, in.In, req)
+	resp, err := a.Database.GetMany(ctx, model.In, req)
 
 	if err != nil {
-		return Wrap(fmt.Sprintf("a.DB.Get in - %v by - %v by value - %v.", in, by, req.By), err)
+		return Wrap(fmt.Sprintf("a.Database.GetMany model - %v by - %v by value - %v.", model, by, req.By), err)
+	}
+
+	model.In, err = a.runFn(ctx, FnAfterDBO, model)
+	if err != nil {
+		return Wrap("a.runFn - FnAfterDBO", err)
 	}
 
 	HandleSuccess(w, r, http.StatusOK, resp)
@@ -148,23 +157,27 @@ func (a *HttpAPI) GetMany(w http.ResponseWriter, r *http.Request) error {
 
 func (a *HttpAPI) Add(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	in, err := a.GetInterfaceFromURL(r)
-
+	model, err := a.getModelFromURL(r)
 	if err != nil {
-		return Wrap("GetInterfaceFromParam", err)
+		return Wrap("a.getModelFromURL", err)
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&in.In); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&model.In); err != nil {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
 
-	in.In, err = a.runFn(ctx, in.Functions, in.In)
+	model.In, err = a.runFn(ctx, FnBeforeDBO, model)
 	if err != nil {
-		return Wrap("in.Function", err)
+		return Wrap("a.runFn - FnBeforeDBO", err)
 	}
 
-	if err := a.Database.Add(ctx, in.In); err != nil {
-		return Wrap(fmt.Sprintf("a.DB.Add in - %v", in), err)
+	if err := a.Database.Add(ctx, model.In); err != nil {
+		return Wrap(fmt.Sprintf("a.Database.Add model - %v", model), err)
+	}
+
+	model.In, err = a.runFn(ctx, FnAfterDBO, model)
+	if err != nil {
+		return Wrap("a.runFn - FnAfterDBO", err)
 	}
 
 	HandleSuccess(w, r, http.StatusOK, nil)
@@ -173,15 +186,14 @@ func (a *HttpAPI) Add(w http.ResponseWriter, r *http.Request) error {
 
 func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	in, err := a.GetInterfaceFromURL(r)
-
+	model, err := a.getModelFromURL(r)
 	if err != nil {
-		return Wrap("budget.GetInterfaceFromParam", err)
+		return Wrap("a.getModelFromURL", err)
 	}
-	update, err := a.GetInterfaceFromURL(r)
 
+	update, err := a.getModelFromURL(r)
 	if err != nil {
-		return Wrap("budget.GetInterfaceFromParam", err)
+		return Wrap("a.getModelFromURL", err)
 	}
 
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -193,15 +205,19 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
 
-	in.In, err = a.runFn(ctx, in.Functions, in.In)
+	model.In, err = a.runFn(ctx, FnBeforeDBO, model)
 	if err != nil {
-		return Wrap("in.Function", err)
+		return Wrap("a.runFn - FnBeforeDBO", err)
 	}
 
-	err = a.Database.Update(ctx, update.In, in.In, id)
-
+	err = a.Database.Update(ctx, update.In, model.In, id)
 	if err != nil {
-		return Wrap(fmt.Sprintf("a.DB.Update update - %v in - %v id - %v.", update, in, id), err)
+		return Wrap(fmt.Sprintf("a.Database.Update update - %v model - %v id - %v.", update, model, id), err)
+	}
+
+	model.In, err = a.runFn(ctx, FnAfterDBO, model)
+	if err != nil {
+		return Wrap("a.runFn - FnAfterDBO", err)
 	}
 
 	HandleSuccess(w, r, http.StatusOK, nil)
@@ -210,9 +226,9 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 
 func (a *HttpAPI) Delete(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	in, err := a.GetInterfaceFromURL(r)
+	model, err := a.getModelFromURL(r)
 	if err != nil {
-		return Wrap("budget.GetInterfaceFromParam", err)
+		return Wrap("a.getModelFromURL", err)
 	}
 
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
@@ -220,21 +236,26 @@ func (a *HttpAPI) Delete(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("strconv.Atoi()", err)
 	}
 
-	in.In, err = a.runFn(ctx, in.Functions, in.In)
+	model.In, err = a.runFn(ctx, FnBeforeDBO, model)
 	if err != nil {
-		return Wrap("in.Function", err)
+		return Wrap("a.runFn - FnBeforeDBO", err)
 	}
 
-	err = a.Database.Delete(ctx, in.In, id)
+	err = a.Database.Delete(ctx, model.In, id)
 	if err != nil {
-		return Wrap(fmt.Sprintf("a.DB.Delete in - %v id - %v.", in, id), err)
+		return Wrap(fmt.Sprintf("a.Database.Delete in - %v id - %v.", model, id), err)
+	}
+
+	model.In, err = a.runFn(ctx, FnAfterDBO, model)
+	if err != nil {
+		return Wrap("a.runFn - FnAfterDBO", err)
 	}
 
 	HandleSuccess(w, r, http.StatusNoContent, nil)
 	return nil
 }
 
-func (a *HttpAPI) GetInterfaceFromURL(r *http.Request) (*Model, error) {
+func (a *HttpAPI) getModelFromURL(r *http.Request) (*Model, error) {
 	for _, model := range a.Models.All {
 		if model.Name == strings.Split(r.URL.String(), "/")[1] {
 			newModelIn := reflect.New(reflect.ValueOf(model.In).Elem().Type()).Interface()
@@ -243,17 +264,34 @@ func (a *HttpAPI) GetInterfaceFromURL(r *http.Request) (*Model, error) {
 				In:        newModelIn,
 				Name:      model.Name,
 				Functions: model.Functions,
+				Routes:    model.Routes,
 			}, nil
 		}
 	}
 	return nil, nil
 }
 
-func (a *HttpAPI) runFn(ctx context.Context, fns map[RouteType]Fn, in interface{}) (interface{}, error) {
+func (a *HttpAPI) runFn(ctx context.Context, fnType FunctionType, model *Model) (interface{}, error) {
 	routeType := RouteTypeFromCtx(ctx)
-	fn, ok := fns[routeType]
-	if !ok {
-		return in, nil
+
+	allFn, ok := model.Functions[RouteAll]
+	if ok {
+		if allFn.functionType == fnType {
+			f, err := allFn.f(ctx, model.In, a.Database)
+			if err != nil {
+				return nil, Wrap("allFn.f", err)
+			}
+			model.In = f
+		}
 	}
-	return fn.f(ctx, in, a.Database)
+
+	routeTypeFn, ok := model.Functions[routeType]
+	if !ok {
+		return model.In, nil
+	}
+
+	if allFn.functionType == fnType {
+		return routeTypeFn.f(ctx, model.In, a.Database)
+	}
+	return model.In, nil
 }

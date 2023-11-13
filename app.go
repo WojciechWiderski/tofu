@@ -57,7 +57,7 @@ func WithMQTTBroker(config MQTTConfig) func(*Tofu) {
 
 func (tofu *Tofu) Run() {
 	if tofu.DB != nil {
-		if err := tofu.DB.Migrate(); err != nil {
+		if err := tofu.DB.migrate(); err != nil {
 			panic(err)
 		}
 	}
@@ -97,6 +97,6 @@ func (tofu *Tofu) Run() {
 			tofu.MQTT.disconnect()
 		})
 		_ = tofu.Graceful.Wait()
-
 	}
+
 }
