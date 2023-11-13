@@ -2,8 +2,6 @@ package tofu
 
 import (
 	"context"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type RouteType uint8
@@ -31,14 +29,18 @@ const (
 type Fn struct {
 	functionType FunctionType
 	routeType    RouteType
-	f            func(ctx context.Context, in interface{}, operations DBOperations) (interface{}, error)
+	f            func(ctx context.Context, operations DBOperations) (interface{}, error)
 }
 
 type Model struct {
 	Name      string
 	In        interface{}
 	Functions map[RouteType]Fn
-	Routes    []chi.Route
+	Routes    []Route
+}
+
+type Route struct {
+	RType RouteType
 }
 
 func NewModel(in interface{}, name string) *Model {
@@ -49,7 +51,7 @@ func NewModel(in interface{}, name string) *Model {
 	}
 }
 
-func (m *Model) AddFunc(routeType RouteType, functionType FunctionType, f func(ctx context.Context, in interface{}, operations DBOperations) (interface{}, error)) *Model {
+func (m *Model) AddFunc(routeType RouteType, functionType FunctionType, f func(ctx context.Context, operations DBOperations) (interface{}, error)) *Model {
 	m.Functions[routeType] = Fn{
 		functionType: functionType,
 		routeType:    routeType,
@@ -57,8 +59,9 @@ func (m *Model) AddFunc(routeType RouteType, functionType FunctionType, f func(c
 	}
 	return m
 }
-func (m *Model) SetRoute(pattern string) *Model {
-	return nil
+func (m *Model) SetRoute(rtype RouteType) *Model {
+	m.Routes = append(m.Routes, Route{RType: rtype})
+	return m
 }
 
 type Models struct {

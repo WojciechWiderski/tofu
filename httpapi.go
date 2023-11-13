@@ -72,6 +72,13 @@ func (a *HttpAPI) GetHandler(corsConfig CorsConfig) http.Handler {
 		r.With(RouteTypeMiddleware(RouteUpdate)).Put(fmt.Sprintf("/{%s}/{id}/update", model.Name), ApiHandleError(a.Update))
 		r.With(RouteTypeMiddleware(RouteDeleteOne)).Delete(fmt.Sprintf("/{%s}/{id}/delete", model.Name), ApiHandleError(a.Delete))
 
+		for _, route := range model.Routes {
+			switch route.RType {
+			case RouteAddOne, RouteAddMany:
+				r.With().Get("/test", ApiHandleError(nil))
+			}
+		}
+
 		for _, route := range r.Routes() {
 			fmt.Println(route.Pattern)
 		}
@@ -165,6 +172,8 @@ func (a *HttpAPI) Add(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&model.In); err != nil {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
+
+	ctx = ContextWithModelIn(ctx, model.In)
 
 	model.In, err = a.runFn(ctx, FnBeforeDBO, model)
 	if err != nil {
@@ -277,7 +286,7 @@ func (a *HttpAPI) runFn(ctx context.Context, fnType FunctionType, model *Model) 
 	allFn, ok := model.Functions[RouteAll]
 	if ok {
 		if allFn.functionType == fnType {
-			f, err := allFn.f(ctx, model.In, a.Database)
+			f, err := allFn.f(ctx, a.Database)
 			if err != nil {
 				return nil, Wrap("allFn.f", err)
 			}
@@ -290,8 +299,8 @@ func (a *HttpAPI) runFn(ctx context.Context, fnType FunctionType, model *Model) 
 		return model.In, nil
 	}
 
-	if allFn.functionType == fnType {
-		return routeTypeFn.f(ctx, model.In, a.Database)
+	if routeTypeFn.functionType == fnType {
+		return routeTypeFn.f(ctx, a.Database)
 	}
 	return model.In, nil
 }
