@@ -98,6 +98,10 @@ type Route struct {
 	Method    string
 }
 
+func NewRoute(routeType RouteType, pattern string, method string, fn func(ctx context.Context, w http.ResponseWriter, r *http.Request, operations DBOperations) (interface{}, error)) {
+	// sprawdzać czy pattern jest ok i czy toutetype jest ok, przenieiść z set route, albo do set route
+}
+
 func NewFn(fnType FunctionType, rType RouteType, f func(ctx context.Context, operations DBOperations) (interface{}, error)) Fn {
 	return Fn{
 		functionType: fnType,

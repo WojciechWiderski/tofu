@@ -5,9 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type BetterError struct {
@@ -29,7 +26,8 @@ func HandleError(w http.ResponseWriter, r *http.Request, err error) {
 	if betterError.code == 0 {
 		betterError.code = http.StatusOK
 	}
-	fmt.Println("[[ERORR]] - ", betterError.error)
+
+	Error(betterError.error.Error())
 	handleStats(r, betterError.code)
 	writeJSON(w, r, betterError.code, betterError.error)
 }
@@ -43,23 +41,6 @@ func handleStats(r *http.Request, statusCode int) {
 	if 0 == statusCode {
 		return
 	}
-}
-
-func getValidPath(r *http.Request) string {
-	rawPatterns := chi.RouteContext(r.Context()).RoutePatterns
-	lastPattern := rawPatterns[len(rawPatterns)-1]
-
-	lastPattern = strings.TrimPrefix(lastPattern, "/")
-	lastPattern = strings.Replace(lastPattern, "/", "_", -1)
-
-	return dropSubstrings([]string{"{", "}"}, lastPattern)
-}
-func dropSubstrings(substrings []string, haystack string) string {
-	for _, substring := range substrings {
-		haystack = strings.Replace(haystack, substring, "", -1)
-	}
-
-	return haystack
 }
 
 func writeJSON(w http.ResponseWriter, r *http.Request, statusCode int, body interface{}) {

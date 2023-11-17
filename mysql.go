@@ -23,6 +23,8 @@ func NewMySqlDB(conf MySqlConfig, models *Models) *MySqlDB {
 		panic(err)
 	}
 
+	Success("My sql connected!")
+
 	return &MySqlDB{
 		db,
 		models,
@@ -32,17 +34,22 @@ func NewMySqlDB(conf MySqlConfig, models *Models) *MySqlDB {
 func connectMySql(conf MySqlConfig) (*gorm.DB, error) {
 	db, err := gorm.Open(mysql.Open(fmt.Sprintf(dsn, conf.Username, conf.Password, conf.Address, conf.DatabaseName)), &gorm.Config{})
 	if err != nil {
+		Error(fmt.Sprintf("Connect to mysql error: %s", err))
 		return nil, NewInternalf("gorm.Open()", err)
 	}
+	Info("Connect to mysql...")
 	return db, nil
 }
 
 func (m *MySqlDB) Migrate() error {
 	for _, model := range m.models.All {
 		if err := m.db.AutoMigrate(&model.In); err != nil {
+			Error(fmt.Sprintf("Migrate error for: %s, error: %s", model.Name, err))
 			return NewInternalf(fmt.Sprintf("db.AutoMigrate() - model: %s", model.Name), err)
 		}
+		Success(fmt.Sprintf("Migrate success for: %s", model.Name))
 	}
+
 	return nil
 }
 
