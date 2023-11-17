@@ -37,7 +37,7 @@ func connectMySql(conf MySqlConfig) (*gorm.DB, error) {
 	return db, nil
 }
 
-func (m *MySqlDB) migrate() error {
+func (m *MySqlDB) Migrate() error {
 	for _, model := range m.models.All {
 		if err := m.db.AutoMigrate(&model.In); err != nil {
 			return NewInternalf(fmt.Sprintf("db.AutoMigrate() - model: %s", model.Name), err)

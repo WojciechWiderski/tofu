@@ -4,8 +4,20 @@ import "context"
 
 const (
 	RouteTypeCtxKey = "route-type-ctx-key"
-	ModelInCtxKey   = "model-ctx-key"
+	ModelCtxKey     = "model-ctx-key"
+	PatternCtxKey   = "pattern-ctx-key"
 )
+
+func PatternFromCtx(ctx context.Context) string {
+	if value, ok := ctx.Value(PatternCtxKey).(string); ok {
+		return value
+	}
+	return ""
+}
+
+func ContextWithPattern(ctx context.Context, pattern string) context.Context {
+	return context.WithValue(ctx, PatternCtxKey, pattern)
+}
 
 func RouteTypeFromCtx(ctx context.Context) RouteType {
 	if value, ok := ctx.Value(RouteTypeCtxKey).(RouteType); ok {
@@ -18,13 +30,20 @@ func ContextWithRouteType(ctx context.Context, routeType RouteType) context.Cont
 	return context.WithValue(ctx, RouteTypeCtxKey, routeType)
 }
 
-func ModelInFromCtx(ctx context.Context) interface{} {
-	if value, ok := ctx.Value(ModelInCtxKey).(interface{}); ok {
+func ModelFromCtx(ctx context.Context) *Model {
+	if value, ok := ctx.Value(ModelCtxKey).(*Model); ok {
 		return value
 	}
 	return nil
 }
 
-func ContextWithModelIn(ctx context.Context, modelIn interface{}) context.Context {
-	return context.WithValue(ctx, ModelInCtxKey, modelIn)
+func ModelInterfaceFromCtx(ctx context.Context) interface{} {
+	if value, ok := ctx.Value(ModelCtxKey).(*Model); ok {
+		return value.In
+	}
+	return nil
+}
+
+func ContextWithModel(ctx context.Context, model *Model) context.Context {
+	return context.WithValue(ctx, ModelCtxKey, model)
 }

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -25,7 +24,7 @@ type DBOperations interface {
 	GetMany(ctx context.Context, in interface{}, params ParamRequest) ([]interface{}, error)
 	Update(ctx context.Context, update interface{}, in interface{}, id int) error
 	Delete(ctx context.Context, in interface{}, id int) error
-	migrate() error
+	Migrate() error
 }
 
 const (
@@ -65,24 +64,19 @@ func (a *HttpAPI) GetHandler(corsConfig CorsConfig) http.Handler {
 		MaxAge:           300, // Maximum value not ignored by any of major browsers
 	}))
 
-	for _, model := range a.Models.All {
-		r.With(RouteTypeMiddleware(RouteGetOne)).Get(fmt.Sprintf("/{%s}/one", model.Name), ApiHandleError(a.GetOne))
-		r.With(RouteTypeMiddleware(RouteGetMany)).Get(fmt.Sprintf("/{%s}/many", model.Name), ApiHandleError(a.GetMany))
-		r.With(RouteTypeMiddleware(RouteAddOne)).Post(fmt.Sprintf("/{%s}/add", model.Name), ApiHandleError(a.Add))
-		r.With(RouteTypeMiddleware(RouteUpdate)).Put(fmt.Sprintf("/{%s}/{id}/update", model.Name), ApiHandleError(a.Update))
-		r.With(RouteTypeMiddleware(RouteDeleteOne)).Delete(fmt.Sprintf("/{%s}/{id}/delete", model.Name), ApiHandleError(a.Delete))
+	r.Route("/api", func(r chi.Router) {
+		r.With(ModelMiddleware(a.Models), RouteTypeMiddleware()).Route("/{model}/{route-type}", func(r chi.Router) {
+			r.With(PatternMiddleware()).Get("/{pattern}", ApiHandleError(a.HandlerGet))
+			r.With(PatternMiddleware()).Get("/", ApiHandleError(a.HandlerGet))
+			r.With(PatternMiddleware()).Post("/{pattern}", ApiHandleError(a.HandlerPost))
+			r.With(PatternMiddleware()).Post("/", ApiHandleError(a.HandlerPost))
+			r.With(PatternMiddleware()).Put("/{pattern}", ApiHandleError(a.HandlerPut))
+			r.With(PatternMiddleware()).Put("/", ApiHandleError(a.HandlerPut))
+			r.With(PatternMiddleware()).Delete("/{pattern}", ApiHandleError(a.HandlerDelete))
+			r.With(PatternMiddleware()).Delete("/", ApiHandleError(a.HandlerDelete))
+		})
+	})
 
-		for _, route := range model.Routes {
-			switch route.RType {
-			case RouteAddOne, RouteAddMany:
-				r.With().Get("/test", ApiHandleError(nil))
-			}
-		}
-
-		for _, route := range r.Routes() {
-			fmt.Println(route.Pattern)
-		}
-	}
 	return r
 }
 
@@ -91,6 +85,55 @@ type ParamRequest struct {
 	Value any `json:"value"`
 	From  any `json:"from"`
 	To    any `json:"to"`
+}
+
+func (a *HttpAPI) HandlerGet(w http.ResponseWriter, r *http.Request) error {
+	fn := RouteTypeFromCtx(r.Context())
+	switch fn {
+	case RouteGetOne:
+		return a.GetOne(w, r)
+	case RouteGetMany:
+		return a.GetMany(w, r)
+	case RouteOwn:
+		return a.GetOwn(w, r)
+	default:
+		return nil
+	}
+}
+
+func (a *HttpAPI) HandlerPost(w http.ResponseWriter, r *http.Request) error {
+	fn := RouteTypeFromCtx(r.Context())
+	switch fn {
+	case RouteAddOne:
+		return a.AddOne(w, r)
+	case RouteAddMany:
+		return a.AddMany(w, r)
+	default:
+		return nil
+	}
+}
+
+func (a *HttpAPI) HandlerPut(w http.ResponseWriter, r *http.Request) error {
+	fn := RouteTypeFromCtx(r.Context())
+	switch fn {
+	case RouteUpdate:
+		return a.Update(w, r)
+	default:
+		return nil
+	}
+}
+
+func (a *HttpAPI) HandlerDelete(w http.ResponseWriter, r *http.Request) error {
+	fn := RouteTypeFromCtx(r.Context())
+	switch fn {
+	case RouteDeleteOne:
+		return a.DeleteMany(w, r)
+	case RouteDeleteMany:
+		return a.DeleteMany(w, r)
+
+	default:
+		return nil
+	}
 }
 
 func (a *HttpAPI) GetOne(w http.ResponseWriter, r *http.Request) error {
@@ -162,7 +205,23 @@ func (a *HttpAPI) GetMany(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (a *HttpAPI) Add(w http.ResponseWriter, r *http.Request) error {
+func (a *HttpAPI) GetOwn(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	model, err := a.getModelFromURL(r)
+	if err != nil {
+		return Wrap("a.getModelFromURL", err)
+	}
+	pattern := PatternFromCtx(ctx)
+
+	resp, err := model.Routes[http.MethodGet][pattern].Fn(ctx, w, r, a.Database)
+	if err != nil {
+		return Wrap("%s", err)
+	}
+	HandleSuccess(w, r, http.StatusOK, resp)
+	return nil
+}
+
+func (a *HttpAPI) AddOne(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	model, err := a.getModelFromURL(r)
 	if err != nil {
@@ -173,7 +232,38 @@ func (a *HttpAPI) Add(w http.ResponseWriter, r *http.Request) error {
 		return NewInternalf("json.NewDecoder(r.Body)", err)
 	}
 
-	ctx = ContextWithModelIn(ctx, model.In)
+	ctx = ContextWithModel(ctx, model)
+
+	model.In, err = a.runFn(ctx, FnBeforeDBO, model)
+	if err != nil {
+		return Wrap("a.runFn - FnBeforeDBO", err)
+	}
+
+	if err := a.Database.Add(ctx, model.In); err != nil {
+		return Wrap(fmt.Sprintf("a.Database.Add model - %v", model), err)
+	}
+
+	model.In, err = a.runFn(ctx, FnAfterDBO, model)
+	if err != nil {
+		return Wrap("a.runFn - FnAfterDBO", err)
+	}
+
+	HandleSuccess(w, r, http.StatusOK, nil)
+	return nil
+}
+
+func (a *HttpAPI) AddMany(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	model, err := a.getModelFromURL(r)
+	if err != nil {
+		return Wrap("a.getModelFromURL", err)
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&model.In); err != nil {
+		return NewInternalf("json.NewDecoder(r.Body)", err)
+	}
+
+	ctx = ContextWithModel(ctx, model)
 
 	model.In, err = a.runFn(ctx, FnBeforeDBO, model)
 	if err != nil {
@@ -233,7 +323,37 @@ func (a *HttpAPI) Update(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (a *HttpAPI) Delete(w http.ResponseWriter, r *http.Request) error {
+func (a *HttpAPI) DeleteOne(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	model, err := a.getModelFromURL(r)
+	if err != nil {
+		return Wrap("a.getModelFromURL", err)
+	}
+
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		return NewInternalf("strconv.Atoi()", err)
+	}
+
+	model.In, err = a.runFn(ctx, FnBeforeDBO, model)
+	if err != nil {
+		return Wrap("a.runFn - FnBeforeDBO", err)
+	}
+
+	err = a.Database.Delete(ctx, model.In, id)
+	if err != nil {
+		return Wrap(fmt.Sprintf("a.Database.Delete in - %v id - %v.", model, id), err)
+	}
+
+	model.In, err = a.runFn(ctx, FnAfterDBO, model)
+	if err != nil {
+		return Wrap("a.runFn - FnAfterDBO", err)
+	}
+
+	HandleSuccess(w, r, http.StatusNoContent, nil)
+	return nil
+}
+func (a *HttpAPI) DeleteMany(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	model, err := a.getModelFromURL(r)
 	if err != nil {
@@ -266,7 +386,7 @@ func (a *HttpAPI) Delete(w http.ResponseWriter, r *http.Request) error {
 
 func (a *HttpAPI) getModelFromURL(r *http.Request) (*Model, error) {
 	for _, model := range a.Models.All {
-		if model.Name == strings.Split(r.URL.String(), "/")[1] {
+		if model.Name == chi.URLParam(r, "model") {
 			newModelIn := reflect.New(reflect.ValueOf(model.In).Elem().Type()).Interface()
 
 			return &Model{
