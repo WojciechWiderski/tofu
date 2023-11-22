@@ -4,29 +4,38 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
+	"github.com/WojciechWiderski/tofu/tconfig"
+	"github.com/WojciechWiderski/tofu/tdatabase"
+	"github.com/WojciechWiderski/tofu/tdatabase/mysql"
+	"github.com/WojciechWiderski/tofu/thelpers"
+	"github.com/WojciechWiderski/tofu/thttp"
+	"github.com/WojciechWiderski/tofu/tlogger"
+	"github.com/WojciechWiderski/tofu/tmodel"
+	"github.com/WojciechWiderski/tofu/tqueue"
 )
 
 type Tofu struct {
 	CTX context.Context
 
-	*Graceful
-	Config
-	CorsConfig
+	graceful   *thelpers.Graceful
+	appConfig  tconfig.App
+	corsConfig tconfig.Cors
 
-	Models     *Models
+	Models     *tmodel.Models
 	HTTPServer *http.Server
-	DB         DBOperations
+	DB         tdatabase.DBOperations
 
-	MQTT *MQTT
+	MQTT *tqueue.MQTT
 }
 
 func New(opts ...func(tofu *Tofu)) *Tofu {
 	tf := &Tofu{}
 	tf.CTX = context.Background()
 
-	tf.Models = NewModels()
+	tf.Models = tmodel.NewModels()
 
-	tf.Graceful = NewGraceful(StopSignal())
+	tf.graceful = thelpers.NewGraceful(thelpers.StopSignal())
 
 	for _, opt := range opts {
 		opt(tf)
@@ -35,68 +44,72 @@ func New(opts ...func(tofu *Tofu)) *Tofu {
 	return tf
 }
 
-func WithMySQLDB(config MySqlConfig) func(*Tofu) {
+func WithMySQLDB(config tconfig.MySql) func(*Tofu) {
 	return func(tofu *Tofu) {
-		tofu.DB = NewMySqlDB(config, tofu.Models)
+		tofu.DB = mysql.New(config, tofu.Models)
 	}
 }
 
-func WithHTTPServer(httpConfig HTTPConfig, corsConfig CorsConfig) func(*Tofu) {
+func WithHTTPServer(httpConfig tconfig.HTTP, corsConfig tconfig.Cors) func(*Tofu) {
+	tlogger.Info(fmt.Sprintf("Create http server"))
 	return func(tofu *Tofu) {
 		tofu.HTTPServer = &http.Server{}
 		tofu.HTTPServer.Addr = fmt.Sprintf(httpConfig.Port)
-		tofu.CorsConfig = corsConfig
+		tofu.corsConfig = corsConfig
 	}
 }
 
-func WithMQTTBroker(config MQTTConfig) func(*Tofu) {
+func WithMQTTBroker(config tconfig.MQTT) func(*Tofu) {
+	tlogger.Info(fmt.Sprintf("Create mqtt broker"))
 	return func(tofu *Tofu) {
-		tofu.MQTT = NewMQTT(config)
+		tofu.MQTT = tqueue.NewMqtt(config)
 	}
 }
 
 func (tofu *Tofu) Run() {
 	if tofu.DB != nil {
 		if err := tofu.DB.Migrate(); err != nil {
+			tlogger.Error(fmt.Sprintf("tofu.DB.Migrate error! Error: %v", err))
 			panic(err)
 		}
 	}
 
 	if tofu.HTTPServer != nil {
-		api := NewHttpApi(tofu.Models, WithDatabase(tofu.DB))
-		tofu.HTTPServer.Handler = api.GetHandler(tofu.CorsConfig)
+		api := thttp.NewHttpApi(tofu.Models, thttp.WithDatabase(tofu.DB))
+		tofu.HTTPServer.Handler = api.GetHandler(tofu.corsConfig)
 
 		go func() {
+			tlogger.Info(fmt.Sprintf("Http api listen on port: %s", tofu.HTTPServer.Addr))
 			if err := tofu.HTTPServer.ListenAndServe(); err != nil {
-				fmt.Println(err)
+				tlogger.Error(fmt.Sprintf(" tofu.HTTPServer.ListenAndServe error! Error: %v", err))
 			}
 		}()
 
-		tofu.Graceful.GoNoErr(func() {
+		tofu.graceful.GoNoErr(func() {
 			if err := tofu.HTTPServer.Shutdown(tofu.CTX); err != nil && err != http.ErrServerClosed {
-				fmt.Println("graceful shutdown http server error:", err)
+				tlogger.Error(fmt.Sprintf("Graceful shutdown thttp server terror: %v", err))
 				return
 			}
-			fmt.Println("grace down")
+			tlogger.Info("HttpApi grace down!")
 		})
-		_ = tofu.Graceful.Wait()
+		_ = tofu.graceful.Wait()
 	}
 
-	if tofu.MQTT != nil && (len(tofu.MQTT.subscribers) > 0 || len(tofu.MQTT.publishers) > 0) {
-		for _, subscriber := range tofu.MQTT.subscribers {
-			go func(s SubFn) {
-				tofu.MQTT.subscribe(s.Topic, s.fn)
+	if tofu.MQTT != nil && (len(tofu.MQTT.Subscribers) > 0 || len(tofu.MQTT.Publishers) > 0) {
+		for _, subscriber := range tofu.MQTT.Subscribers {
+			go func(s tqueue.SubFn) {
+				tofu.MQTT.Subscribe(s.Topic, s.Fn)
 			}(subscriber)
 		}
-		for _, publisher := range tofu.MQTT.publishers {
-			go func(p PubFn) {
-				tofu.MQTT.publish(p.Topic, p.fn)
+		for _, publisher := range tofu.MQTT.Publishers {
+			go func(p tqueue.PubFn) {
+				tofu.MQTT.Publish(p.Topic, p.Fn)
 			}(publisher)
 		}
-		tofu.Graceful.GoNoErr(func() {
-			tofu.MQTT.disconnect()
+		tofu.graceful.GoNoErr(func() {
+			tofu.MQTT.Disconnect()
 		})
-		_ = tofu.Graceful.Wait()
+		_ = tofu.graceful.Wait()
 	}
 
 }

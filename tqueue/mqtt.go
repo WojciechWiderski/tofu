@@ -1,42 +1,44 @@
-package tofu
+package tqueue
 
 import (
 	"fmt"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+
+	"github.com/WojciechWiderski/tofu/tconfig"
 )
 
 type MQTT struct {
-	config      MQTTConfig
+	config      tconfig.MQTT
 	Client      mqtt.Client
-	publishers  []PubFn
-	subscribers []SubFn
+	Publishers  []PubFn
+	Subscribers []SubFn
 }
 
 type SubFn struct {
 	Topic string
-	fn    mqtt.MessageHandler
+	Fn    mqtt.MessageHandler
 }
 
 type PubFn struct {
 	Topic string
-	fn    func() (interface{}, error)
+	Fn    func() (interface{}, error)
 }
 
 func (m *MQTT) AddSubscribe(topic string, fn func(in interface{})) {
 	var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 		fn(msg.Payload())
 	}
-	m.subscribers = append(m.subscribers, SubFn{
+	m.Subscribers = append(m.Subscribers, SubFn{
 		Topic: topic,
-		fn:    messagePubHandler,
+		Fn:    messagePubHandler,
 	})
 }
 
 func (m *MQTT) AddPublisher(topic string, fn func() (interface{}, error)) {
-	m.publishers = append(m.publishers, PubFn{
+	m.Publishers = append(m.Publishers, PubFn{
 		Topic: topic,
-		fn:    fn,
+		Fn:    fn,
 	})
 }
 
@@ -48,7 +50,7 @@ var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err
 	fmt.Printf("Connect lost: %v", err)
 }
 
-func NewMQTT(config MQTTConfig) *MQTT {
+func NewMqtt(config tconfig.MQTT) *MQTT {
 	m := &MQTT{
 		config: config,
 	}
@@ -77,7 +79,7 @@ func (m *MQTT) connectToBroker() (mqtt.Client, error) {
 	return client, nil
 }
 
-func (m *MQTT) publish(topic string, fn func() (interface{}, error)) {
+func (m *MQTT) Publish(topic string, fn func() (interface{}, error)) {
 	out, err := fn()
 	if err == nil {
 		token := m.Client.Publish(topic, 0, false, out)
@@ -85,13 +87,13 @@ func (m *MQTT) publish(topic string, fn func() (interface{}, error)) {
 	}
 }
 
-func (m *MQTT) subscribe(topic string, fn mqtt.MessageHandler) {
+func (m *MQTT) Subscribe(topic string, fn mqtt.MessageHandler) {
 	token := m.Client.Subscribe(topic, 1, fn)
 	token.Wait()
 	fmt.Println("Subscribed to topic: ", topic)
 }
 
-func (m *MQTT) disconnect() {
+func (m *MQTT) Disconnect() {
 	fmt.Println("Disconnecting...")
 	m.Client.Disconnect(250)
 }

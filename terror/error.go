@@ -1,10 +1,12 @@
-package tofu
+package terror
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/WojciechWiderski/tofu/tlogger"
 )
 
 type BetterError struct {
@@ -12,7 +14,7 @@ type BetterError struct {
 	code int
 }
 
-func ApiHandleError(h func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+func HttpApiHandleError(h func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := h(w, r)
 		if err == nil {
@@ -27,12 +29,12 @@ func HandleError(w http.ResponseWriter, r *http.Request, err error) {
 		betterError.code = http.StatusOK
 	}
 
-	Error(betterError.error.Error())
+	tlogger.Error(betterError.error.Error())
 	handleStats(r, betterError.code)
 	writeJSON(w, r, betterError.code, betterError.error)
 }
 
-func HandleSuccess(w http.ResponseWriter, r *http.Request, statusCode int, body interface{}) {
+func HttpApiHandleSuccess(w http.ResponseWriter, r *http.Request, statusCode int, body interface{}) {
 	handleStats(r, statusCode)
 	writeJSON(w, r, statusCode, body)
 }

@@ -1,4 +1,4 @@
-package tofu
+package tlogger
 
 import (
 	"fmt"
@@ -14,9 +14,11 @@ const colorNone = "\033[0m"
 func Error(msg string) {
 	writeLog(msg, colorRed)
 }
+
 func Success(msg string) {
 	writeLog(msg, colorGreen)
 }
+
 func Warn(msg string) {
 	writeLog(msg, colorYellow)
 }

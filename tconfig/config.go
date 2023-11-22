@@ -1,16 +1,16 @@
-package tofu
+package tconfig
 
-type Config struct {
+type App struct {
 }
 
-type MySqlConfig struct {
+type MySql struct {
 	Username     string
 	Password     string
 	Address      string
 	DatabaseName string
 }
 
-type CorsConfig struct {
+type Cors struct {
 	AllowedOrigins   []string
 	AllowedMethods   []string
 	AllowedHeaders   []string
@@ -19,11 +19,11 @@ type CorsConfig struct {
 	MaxAge           int
 }
 
-type HTTPConfig struct {
+type HTTP struct {
 	Port string
 }
 
-type MQTTConfig struct {
+type MQTT struct {
 	Broker   string
 	Port     int
 	ClientID string
