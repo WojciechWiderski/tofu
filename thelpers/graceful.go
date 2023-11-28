@@ -8,7 +8,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// Graceful run all go routines --> wait for signal  --> wait for all go routines exits
 type Graceful struct {
 	InterruptSignal chan struct{}
 	*errgroup.Group
@@ -40,11 +39,9 @@ func StopSignal() chan struct{} {
 	stop := make(chan struct{})
 
 	go func() {
-		// Setting up signal capturing
 		stopSig := make(chan os.Signal, 1)
 		signal.Notify(stopSig, os.Interrupt, syscall.SIGTERM)
 
-		// Waiting for SIGINT (pkill -2)
 		<-stopSig
 		close(stop)
 	}()

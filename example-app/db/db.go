@@ -1,4 +1,4 @@
-package mysql
+package db
 
 import (
 	"context"
@@ -18,6 +18,18 @@ import (
 type DB struct {
 	db     *gorm.DB
 	models *tmodel.Models
+}
+
+func (m *DB) Migrate() error {
+	for _, model := range m.models.All {
+		if err := m.db.AutoMigrate(&model.In); err != nil {
+			tlogger.Error(fmt.Sprintf("Migrate terror for: %s, terror: %s", model.Name, err))
+			return terror.NewInternalf(fmt.Sprintf("db.AutoMigrate() - tmodel: %s", model.Name), err)
+		}
+		tlogger.Success(fmt.Sprintf("Migrate success for: %s", model.Name))
+	}
+
+	return nil
 }
 
 var dsn = "%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local"
@@ -45,18 +57,6 @@ func connectMySql(conf tconfig.MySql) (*gorm.DB, error) {
 	}
 	tlogger.Info("Connect to mysql...")
 	return db, nil
-}
-
-func (m *DB) Migrate() error {
-	for _, model := range m.models.All {
-		if err := m.db.AutoMigrate(&model.In); err != nil {
-			tlogger.Error(fmt.Sprintf("Migrate terror for: %s, terror: %s", model.Name, err))
-			return terror.NewInternalf(fmt.Sprintf("db.AutoMigrate() - model: %s", model.Name), err)
-		}
-		tlogger.Success(fmt.Sprintf("Migrate success for: %s", model.Name))
-	}
-
-	return nil
 }
 
 func (m *DB) Add(ctx context.Context, in interface{}) error {

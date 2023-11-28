@@ -25,7 +25,7 @@ func ModelMiddleware(models *tmodel.Models) func(next http.Handler) http.Handler
 				}
 			}
 
-			terror.HandleError(w, r, terror.NewBadRequest("wrong path - tmodel"))
+			terror.HandleError(w, r, terror.NewBadRequest("wrong path - model"))
 		})
 	}
 }

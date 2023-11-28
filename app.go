@@ -66,50 +66,55 @@ func WithMQTTBroker(config tconfig.MQTT) func(*Tofu) {
 	}
 }
 
-func (tofu *Tofu) Run() {
-	if tofu.DB != nil {
-		if err := tofu.DB.Migrate(); err != nil {
+func (t *Tofu) SetOwnDB(db tdatabase.DBOperations) {
+
+	t.DB = db
+}
+
+func (t *Tofu) Run() {
+	if t.DB != nil {
+		if err := t.DB.Migrate(); err != nil {
 			tlogger.Error(fmt.Sprintf("tofu.DB.Migrate error! Error: %v", err))
 			panic(err)
 		}
 	}
 
-	if tofu.HTTPServer != nil {
-		api := thttp.NewHttpApi(tofu.Models, thttp.WithDatabase(tofu.DB))
-		tofu.HTTPServer.Handler = api.GetHandler(tofu.corsConfig)
+	if t.HTTPServer != nil {
+		api := thttp.NewHttpApi(t.Models, thttp.WithDatabase(t.DB))
+		t.HTTPServer.Handler = api.GetHandler(t.corsConfig)
 
 		go func() {
-			tlogger.Info(fmt.Sprintf("Http api listen on port: %s", tofu.HTTPServer.Addr))
-			if err := tofu.HTTPServer.ListenAndServe(); err != nil {
+			tlogger.Info(fmt.Sprintf("Http api listen on port: %s", t.HTTPServer.Addr))
+			if err := t.HTTPServer.ListenAndServe(); err != nil {
 				tlogger.Error(fmt.Sprintf(" tofu.HTTPServer.ListenAndServe error! Error: %v", err))
 			}
 		}()
 
-		tofu.graceful.GoNoErr(func() {
-			if err := tofu.HTTPServer.Shutdown(tofu.CTX); err != nil && err != http.ErrServerClosed {
+		t.graceful.GoNoErr(func() {
+			if err := t.HTTPServer.Shutdown(t.CTX); err != nil && err != http.ErrServerClosed {
 				tlogger.Error(fmt.Sprintf("Graceful shutdown thttp server terror: %v", err))
 				return
 			}
 			tlogger.Info("HttpApi grace down!")
 		})
-		_ = tofu.graceful.Wait()
+		_ = t.graceful.Wait()
 	}
 
-	if tofu.MQTT != nil && (len(tofu.MQTT.Subscribers) > 0 || len(tofu.MQTT.Publishers) > 0) {
-		for _, subscriber := range tofu.MQTT.Subscribers {
+	if t.MQTT != nil && (len(t.MQTT.Subscribers) > 0 || len(t.MQTT.Publishers) > 0) {
+		for _, subscriber := range t.MQTT.Subscribers {
 			go func(s tqueue.SubFn) {
-				tofu.MQTT.Subscribe(s.Topic, s.Fn)
+				t.MQTT.Subscribe(s.Topic, s.Fn)
 			}(subscriber)
 		}
-		for _, publisher := range tofu.MQTT.Publishers {
+		for _, publisher := range t.MQTT.Publishers {
 			go func(p tqueue.PubFn) {
-				tofu.MQTT.Publish(p.Topic, p.Fn)
+				t.MQTT.Publish(p.Topic, p.Fn)
 			}(publisher)
 		}
-		tofu.graceful.GoNoErr(func() {
-			tofu.MQTT.Disconnect()
+		t.graceful.GoNoErr(func() {
+			t.MQTT.Disconnect()
 		})
-		_ = tofu.graceful.Wait()
+		_ = t.graceful.Wait()
 	}
 
 }

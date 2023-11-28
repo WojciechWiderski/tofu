@@ -14,11 +14,11 @@ type BetterError struct {
 	code int
 }
 
-func HttpApiHandleError(h func(http.ResponseWriter, *http.Request) error) http.HandlerFunc {
+func HttpApiHandleError(h func(http.ResponseWriter, *http.Request) (interface{}, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		err := h(w, r)
+		resp, err := h(w, r)
 		if err == nil {
-			return
+			HttpApiHandleSuccess(w, r, http.StatusOK, resp)
 		}
 		HandleError(w, r, err)
 	}
