@@ -53,6 +53,7 @@ func (m *DB) Migrate() error {
 			tlogger.Error(fmt.Sprintf("Migrate terror for: %s, terror: %s", model.Name, err))
 			return terror.NewInternalf(fmt.Sprintf("db.AutoMigrate() - model: %s", model.Name), err)
 		}
+		model.DB = m
 		tlogger.Success(fmt.Sprintf("Migrate success for: %s", model.Name))
 	}
 

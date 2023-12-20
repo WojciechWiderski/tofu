@@ -67,8 +67,10 @@ func WithMQTTBroker(config tconfig.MQTT) func(*Tofu) {
 }
 
 func (t *Tofu) SetOwnDB(db tdatabase.DBOperations) {
-
-	t.DB = db
+	if db != nil {
+		t.DB = db
+		tlogger.Info("Set own database successfully!")
+	}
 }
 
 func (t *Tofu) Run() {

@@ -1,17 +1,45 @@
 package model
 
-import "gorm.io/gorm"
+import (
+	"gorm.io/gorm"
+)
 
 type User struct {
 	gorm.Model
-	Name  string  `json:"name"`
-	Age   int     `json:"age"`
-	Books []*Book `json:"books"  gorm:"many2many:user_books;"`
+	CurrentExp   uint
+	CurrentLevel uint
 }
 
-type Book struct {
+type Level struct {
 	gorm.Model
-	Author string  `json:"author"`
-	Title  string  `json:"title"`
-	Users  []*User `json:"users" gorm:"many2many:user_books;"`
+	MinExperience uint
+	MaxExperience uint
+	Award         string
+}
+
+type Day struct {
+	gorm.Model
+	Name   string
+	TaskID uint
+}
+
+type Date struct {
+	gorm.Model
+	Value  uint64
+	TaskID uint
+}
+
+type Task struct {
+	gorm.Model
+	IsRepeatable           bool
+	DaysOfTheWeek          []Day
+	Dates                  []Date
+	Deadline               uint64
+	Name                   string
+	Description            string
+	DefaultExperience      uint
+	CurrentExperience      uint
+	UpgradeExperienceValue uint
+	Record                 uint
+	Status                 uint
 }

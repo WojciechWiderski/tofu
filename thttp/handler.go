@@ -35,8 +35,8 @@ func (a *HttpAPI) GetHandler(corsConfig tconfig.Cors) http.Handler {
 			r.With(PatternMiddleware()).Post("/", terror.HttpApiHandleError(a.HandlerPost))
 			r.With(PatternMiddleware()).Put("/{pattern}", terror.HttpApiHandleError(a.HandlerPut))
 			r.With(PatternMiddleware()).Put("/", terror.HttpApiHandleError(a.HandlerPut))
-			r.With(PatternMiddleware()).Delete("/{pattern}", terror.HttpApiHandleError(a.HandlerDelete))
-			r.With(PatternMiddleware()).Delete("/", terror.HttpApiHandleError(a.HandlerDelete))
+			//r.With(PatternMiddleware()).Delete("/{pattern}", terror.HttpApiHandleError(a.HandlerDelete))
+			//r.With(PatternMiddleware()).Delete("/", terror.HttpApiHandleError(a.HandlerDelete))
 		})
 	})
 

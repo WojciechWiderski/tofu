@@ -13,6 +13,7 @@ type Model struct {
 	In        interface{}
 	Functions map[RouteType]Fn
 	Routes    map[string]map[string]Route
+	DB        tdatabase.DBOperations
 }
 
 func NewModel(in interface{}, name string) *Model {
@@ -51,4 +52,13 @@ func NewModels(models ...*Model) *Models {
 
 func (m *Models) Set(model *Model) {
 	m.All = append(m.All, model)
+}
+
+func (m *Models) Get(name string) *Model {
+	for _, model := range m.All {
+		if model.Name == name {
+			return model
+		}
+	}
+	return nil
 }
