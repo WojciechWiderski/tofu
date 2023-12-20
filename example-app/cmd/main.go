@@ -3,7 +3,10 @@ package main
 import (
 	"github.com/WojciechWiderski/tofu"
 	"github.com/WojciechWiderski/tofu/example-app/model"
+	"github.com/WojciechWiderski/tofu/example-app/service"
 	"github.com/WojciechWiderski/tofu/tconfig"
+	"github.com/WojciechWiderski/tofu/terror"
+	"github.com/WojciechWiderski/tofu/tlogger"
 	"github.com/WojciechWiderski/tofu/tmodel"
 )
 
@@ -24,4 +27,11 @@ func main() {
 	app.Models.Set(tmodel.NewModel(&model.Task{}, "task"))
 
 	app.Run()
+
+	svc := service.New(app.Models)
+	err := svc.AddUser()
+	if err != nil {
+		tlogger.Error(terror.Wrap("svc.AddUser()", err).Error())
+	}
+
 }

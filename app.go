@@ -79,6 +79,9 @@ func (t *Tofu) Run() {
 			tlogger.Error(fmt.Sprintf("tofu.DB.Migrate error! Error: %v", err))
 			panic(err)
 		}
+		for _, model := range t.Models.All {
+			model.Store = t.DB
+		}
 	}
 
 	if t.HTTPServer != nil {

@@ -3,6 +3,7 @@ package tmodel
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	"github.com/WojciechWiderski/tofu/tdatabase"
 	"github.com/WojciechWiderski/tofu/tlogger"
@@ -13,7 +14,7 @@ type Model struct {
 	In        interface{}
 	Functions map[RouteType]Fn
 	Routes    map[string]map[string]Route
-	DB        tdatabase.DBOperations
+	Store     tdatabase.DBOperations
 }
 
 func NewModel(in interface{}, name string) *Model {
@@ -61,4 +62,21 @@ func (m *Models) Get(name string) *Model {
 		}
 	}
 	return nil
+}
+
+func (m *Models) GetRawModel(name string) (*Model, error) {
+	for _, model := range m.All {
+		if model.Name == name {
+			newModelIn := reflect.New(reflect.ValueOf(model.In).Elem().Type()).Interface()
+
+			return &Model{
+				In:        newModelIn,
+				Name:      model.Name,
+				Functions: model.Functions,
+				Routes:    model.Routes,
+				Store:     model.Store,
+			}, nil
+		}
+	}
+	return nil, nil
 }

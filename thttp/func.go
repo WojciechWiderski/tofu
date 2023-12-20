@@ -62,7 +62,7 @@ func (a *HttpAPI) GetOne(ctx context.Context, params tdatabase.ParamRequest) (in
 		return nil, terror.Wrap("a.runFn - FnBeforeDBO", err)
 	}
 
-	resp, err := a.Database.GetOne(ctx, modelFromCtx.In, params)
+	resp, err := modelFromCtx.Store.GetOne(ctx, modelFromCtx.In, params)
 	if err != nil {
 		return nil, terror.Wrap(fmt.Sprintf("a.Database.GetOne model - %v by - %v by value - %v.", modelFromCtx, by, params.By), err)
 	}
@@ -85,7 +85,7 @@ func (a *HttpAPI) GetMany(ctx context.Context, params tdatabase.ParamRequest) (i
 		return nil, terror.Wrap("a.runFn - FnBeforeDBO", err)
 	}
 
-	resp, err := a.Database.GetMany(ctx, modelFromCtx.In, params)
+	resp, err := modelFromCtx.Store.GetMany(ctx, modelFromCtx.In, params)
 
 	if err != nil {
 		return nil, terror.Wrap(fmt.Sprintf("a.Database.GetMany model - %v by - %v by value - %v.", model, by, params.By), err)
@@ -126,7 +126,7 @@ func (a *HttpAPI) AddOne(ctx context.Context, body io.Reader) error {
 		return terror.Wrap("a.runFn - FnBeforeDBO", err)
 	}
 
-	if err := a.Database.Add(ctx, modelFromCtx.In); err != nil {
+	if err := modelFromCtx.Store.Add(ctx, modelFromCtx.In); err != nil {
 		return terror.Wrap(fmt.Sprintf("a.Database.Add model - %v", model), err)
 	}
 

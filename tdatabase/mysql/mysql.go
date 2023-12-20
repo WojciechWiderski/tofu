@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -53,10 +54,8 @@ func (m *DB) Migrate() error {
 			tlogger.Error(fmt.Sprintf("Migrate terror for: %s, terror: %s", model.Name, err))
 			return terror.NewInternalf(fmt.Sprintf("db.AutoMigrate() - model: %s", model.Name), err)
 		}
-		model.DB = m
 		tlogger.Success(fmt.Sprintf("Migrate success for: %s", model.Name))
 	}
-
 	return nil
 }
 
@@ -76,6 +75,9 @@ func (m *DB) GetOne(ctx context.Context, in interface{}, params tdatabase.ParamR
 
 	if result := tx.First(&in, fmt.Sprintf("%s = ?", params.By), params.Value); result.Error != nil {
 		tx.Rollback()
+		if errors.Is(result.Error, fmt.Errorf("record not found")) {
+			return nil,
+		}
 		return nil, terror.NewInternalf("tx.First()", fmt.Errorf(result.Error.Error()))
 	}
 	tx.Commit()

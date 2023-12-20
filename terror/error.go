@@ -9,6 +9,8 @@ import (
 	"github.com/WojciechWiderski/tofu/tlogger"
 )
 
+const RecordNotFound error
+
 type BetterError struct {
 	error
 	code int
